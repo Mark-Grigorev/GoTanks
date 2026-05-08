@@ -1,0 +1,9 @@
+id: medium
+name: "Средний"
+speed: 3
+hp: 3
+bullet_speed: 8
+bullet_damage: 2
+shoot_cooldown: 10
+hull: "PNG/Hulls_Color_B/Hull_03.png"
+gun:  "PNG/Weapon_Color_B_256X256/Gun_03.png"

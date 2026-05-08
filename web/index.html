@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>GoTanks</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Lobby -->
+  <div id="screen-lobby" class="screen active">
+    <h1>GoTanks</h1>
+
+    <section id="tank-select">
+      <h2>Выбери танк</h2>
+      <div id="tank-list" class="card-row"></div>
+    </section>
+
+    <section id="room-section">
+      <div class="row">
+        <h2>Комнаты</h2>
+        <button id="btn-refresh" class="btn-sm">↻</button>
+      </div>
+      <div id="room-list"></div>
+      <button id="btn-create" class="btn-primary">Создать комнату</button>
+    </section>
+  </div>
+
+  <!-- Waiting room -->
+  <div id="screen-waiting" class="screen">
+    <h2>Ожидание игроков</h2>
+    <p id="wait-count"></p>
+    <div id="wait-players"></div>
+    <button id="btn-start" class="btn-primary">▶ Начать игру</button>
+    <button id="btn-leave" class="btn-secondary">Выйти</button>
+  </div>
+
+  <!-- Game -->
+  <div id="screen-game" class="screen">
+    <canvas id="game-canvas"></canvas>
+    <div id="game-hud">
+      <span id="hud-hp">HP: -</span>
+      <span id="hud-kills">Убийства: 0</span>
+      <button id="btn-quit" class="btn-quit">✕</button>
+    </div>
+    <div id="dpad">
+      <button data-dir="up"    class="dpad-btn dpad-up">▲</button>
+      <button data-dir="left"  class="dpad-btn dpad-left">◀</button>
+      <button data-dir="right" class="dpad-btn dpad-right">▶</button>
+      <button data-dir="down"  class="dpad-btn dpad-down">▼</button>
+      <button id="btn-shoot"   class="dpad-btn dpad-shoot">🔫</button>
+    </div>
+  </div>
+
+  <!-- Game Over -->
+  <div id="screen-gameover" class="screen">
+    <h2 id="go-title"></h2>
+    <p id="go-sub"></p>
+    <button id="btn-back" class="btn-primary">В лобби</button>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>

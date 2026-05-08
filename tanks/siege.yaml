@@ -1,0 +1,9 @@
+id: siege
+name: "Осадный"
+speed: 1
+hp: 8
+bullet_speed: 4
+bullet_damage: 5
+shoot_cooldown: 20
+hull: "PNG/Hulls_Color_D/Hull_08.png"
+gun:  "PNG/Weapon_Color_D_256X256/Gun_08.png"

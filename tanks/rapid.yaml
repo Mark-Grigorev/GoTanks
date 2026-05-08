@@ -1,0 +1,9 @@
+id: rapid
+name: "Скорострел"
+speed: 3
+hp: 2
+bullet_speed: 10
+bullet_damage: 1
+shoot_cooldown: 4
+hull: "PNG/Hulls_Color_C/Hull_02.png"
+gun:  "PNG/Weapon_Color_C_256X256/Gun_05.png"
