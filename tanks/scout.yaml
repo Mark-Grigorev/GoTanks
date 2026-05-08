@@ -1,0 +1,9 @@
+id: scout
+name: "Разведчик"
+speed: 7
+hp: 1
+bullet_speed: 12
+bullet_damage: 1
+shoot_cooldown: 7
+hull: "PNG/Hulls_Color_D/Hull_01.png"
+gun:  "PNG/Weapon_Color_D_256X256/Gun_01.png"
