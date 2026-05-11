@@ -22,8 +22,9 @@ var upgrader = websocket.Upgrader{
 }
 
 type roomEntry struct {
-	room    *game.Room
-	clients map[string]*Client // playerID → client
+	room         *game.Room
+	clients      map[string]*Client // playerID → client
+	hostPlayerID string
 }
 
 type Hub struct {
@@ -118,10 +119,11 @@ func (h *Hub) createRoom(c *Client, mapID, tankType string) {
 	}
 
 	entry := &roomEntry{
-		room:    room,
-		clients: map[string]*Client{c.PlayerID: c},
+		room:         room,
+		clients:      map[string]*Client{c.PlayerID: c},
+		hostPlayerID: c.PlayerID,
 	}
-	h.setupCallbacks(room, roomID, entry)
+	h.setupCallbacks(room, roomID)
 
 	h.mu.Lock()
 	h.rooms[roomID] = entry
@@ -134,6 +136,7 @@ func (h *Hub) createRoom(c *Client, mapID, tankType string) {
 		PlayerID:    c.PlayerID,
 		PlayerCount: 1,
 		MaxPlayers:  h.maxPlayers,
+		IsHost:      true,
 	}})
 }
 
@@ -187,6 +190,10 @@ func (h *Hub) forceStart(c *Client) {
 	entry, ok := h.rooms[c.RoomID]
 	h.mu.Unlock()
 	if !ok || entry.room.State != game.RoomWaiting || entry.room.PlayerCount() == 0 {
+		return
+	}
+	if entry.hostPlayerID != c.PlayerID {
+		c.Send(ServerMsg{Type: "error", Payload: ErrorPayload{Message: "only host can start"}})
 		return
 	}
 	h.startGame(c.RoomID, entry)
@@ -255,7 +262,7 @@ func (h *Hub) removeFromRoom(c *Client) {
 	}
 }
 
-func (h *Hub) setupCallbacks(room *game.Room, roomID string, entry *roomEntry) {
+func (h *Hub) setupCallbacks(room *game.Room, roomID string) {
 	room.OnStateUpdate = func(snap game.StateSnapshot) {
 		msg := ServerMsg{Type: "state", Payload: snap}
 		h.broadcastRoomMsg(roomID, msg)
@@ -272,7 +279,7 @@ func (h *Hub) setupCallbacks(room *game.Room, roomID string, entry *roomEntry) {
 			Type:    "game_over",
 			Payload: GameOverPayload{WinnerID: winnerID},
 		})
-		go h.finishMatch(roomID, winnerID, players)
+		go h.finishMatch(winnerID, players)
 	}
 }
 
@@ -311,7 +318,7 @@ func (h *Hub) startGame(roomID string, entry *roomEntry) {
 	go entry.room.Start()
 }
 
-func (h *Hub) finishMatch(roomID, winnerID string, players []*game.Player) {
+func (h *Hub) finishMatch(winnerID string, players []*game.Player) {
 	match, err := h.store.CreateMatch(context.Background(), "")
 	if err != nil {
 		log.Printf("create match: %v", err)

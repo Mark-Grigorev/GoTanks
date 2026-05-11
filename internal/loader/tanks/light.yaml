@@ -1,7 +1,7 @@
 id: light
 name: "Лёгкий"
-speed: 5
-hp: 2
+speed: 3
+hp: 4
 bullet_speed: 10
 bullet_damage: 1
 shoot_cooldown: 8
