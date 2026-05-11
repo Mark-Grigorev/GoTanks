@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"io/fs"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -18,10 +19,11 @@ type Handler struct {
 	store  *store.Store
 	loader *loader.Loader
 	hub    *hub.Hub
+	web    fs.FS
 }
 
-func New(a *auth.Service, s *store.Store, l *loader.Loader, h *hub.Hub) *Handler {
-	return &Handler{auth: a, store: s, loader: l, hub: h}
+func New(a *auth.Service, s *store.Store, l *loader.Loader, h *hub.Hub, web fs.FS) *Handler {
+	return &Handler{auth: a, store: s, loader: l, hub: h, web: web}
 }
 
 func (h *Handler) Router() http.Handler {
@@ -29,10 +31,7 @@ func (h *Handler) Router() http.Handler {
 	r.Use(chimw.Recoverer)
 	r.Use(chimw.Logger)
 
-	// Tank sprites
-	r.Handle("/sprites/*", http.StripPrefix("/sprites/", http.FileServer(http.Dir("tanks-sprites"))))
-	// Static web UI (last, catches everything else)
-	r.Handle("/*", http.FileServer(http.Dir("web")))
+	r.Handle("/*", http.FileServer(http.FS(h.web)))
 
 	r.Route("/api", func(r chi.Router) {
 		r.Post("/auth", h.Auth)

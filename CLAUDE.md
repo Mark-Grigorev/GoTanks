@@ -69,7 +69,7 @@ hull: "PNG/Hulls_Color_B/Hull_06.png"
 gun:  "PNG/Weapon_Color_B_256X256/Gun_06.png"
 ```
 
-Загружается при старте в `map[string]*TankConfig` — O(1) доступ. Пути спрайтов относительны `tanks-sprites/`.
+Загружается при старте в `map[string]*TankConfig` — O(1) доступ. Поля `hull`/`gun` сохранены для совместимости конфигов, но рендеринг не использует PNG.
 
 Текущие 7 танков: `scout`, `light`, `medium`, `rapid`, `sniper`, `heavy`, `siege`.
 
@@ -97,6 +97,7 @@ spawns:      # [x, y] точки спавна
 - `winner()` срабатывает только если `initialPlayerCount > 1` и есть хотя бы один погибший
 - Направления: 0=вверх, 1=вправо, 2=вниз, 3=влево
 - Мьютекс на Room освобождается через `defer` — не вручную
+- **Баг-фикс**: при спавне пули проверяется `IsSolid(bx, by)` — если клетка перед танком занята стеной или кирпичом, пуля не создаётся (кирпич уничтожается сразу). Это устраняет баг стрельбы сквозь стену вплотную.
 
 ## WebSocket протокол
 
@@ -121,14 +122,66 @@ spawns:      # [x, y] точки спавна
 
 ---
 
-## Клиентский рендеринг (Canvas)
+## Клиентский рендеринг (Canvas) — стиль Battle City 90-х
 
-- Все 14 спрайтов (7 танков × hull+gun) загружаются **до** открытия лобби через `Promise.all`
-- Танк рендерится двумя слоями: hull → gun, оба `ctx.drawImage` 256×256
-- Размер танка: 55% от тайла (`TS = T * 0.55`)
-- Ротация по направлению: `ctx.rotate(DIR_DEG[dir] * Math.PI / 180)`
-- Fallback на цветные прямоугольники если спрайт не загрузился
-- HP-бар рендерится вне трансформации (всегда горизонтальный)
+PNG-спрайты **не используются**. Всё рисуется на Canvas API программно.
+
+### Тайлы — `drawTile(ctx, type, px, py, T)`
+- `TILE_EMPTY`: тёмный фон `#0c0c10` + точечная текстура (при T ≥ 12)
+- `TILE_BRICK`: морtar-фон `#4a1200` + 4 кирпичика 2×2 с highlight/shadow
+- `TILE_WALL`: 4 стальные панели с рельефом (светлая верх/лево, тёмная низ/право)
+
+### Танки — `drawTankPixel(ctx, tankType, color, isMe, T)`
+Параметры формы берутся из `TANK_DEFS[tankType]` (доли от T):
+- `tw` — ширина гусениц
+- `bw` — ширина корпуса
+- `turW` — ширина башни
+- `gunW` / `gunL` — толщина/длина ствола
+
+Порядок отрисовки: гусеницы → корпус → ствол → башня (башня перекрывает основание ствола).
+Танк всегда рисуется лицом вверх в локальном пространстве, затем поворачивается через `ctx.rotate(DIR_DEG[dir] * Math.PI / 180)`.
+Свой танк помечается белым крестом на корпусе.
+
+### Пули
+Белые квадраты `bSize = max(2, round(T * 0.18))`, без интерполяции.
+
+### HP-бар
+Отображается в % от максимального HP (`t.hp / maxHp`). HUD тоже показывает `HP X%`.
+
+### Адаптивный размер
+CSS-лейаут: `#screen-game` — flex-колонка, `#game-canvas` — `flex: 1` (занимает всё место между HUD и dpad). `calcTileSize()` читает `canvas.clientWidth/clientHeight` из CSS, не использует `innerHeight - px`.
+Все размеры в CSS через `clamp()`, `vw`, `dvh`.
+
+---
+
+## Логгер (`internal/logger`)
+
+```go
+log := logger.New(false) // false=JSON/INFO (prod), true=Text/DEBUG (local)
+log.Infof("loaded %d tanks", n)
+log.Errorf("db: %v", err)
+child := log.With("room", roomID) // структурные поля
+```
+
+Никаких прямых вызовов `slog` вне пакета `logger`.
+
+---
+
+## Тесты
+
+Покрыты чистыми unit-тестами (без БД и внешних сервисов):
+
+| Пакет | Что тестируется |
+|---|---|
+| `internal/auth` | HMAC-валидация initData, выдача/парсинг JWT (expired, wrong secret, tampered) |
+| `internal/config` | Дефолты, кастомные значения, ошибка при отсутствии required полей |
+| `internal/loader` | Загрузка YAML, пустые директории, невалидный YAML, игнор не-.yaml файлов |
+| `internal/game` | `IsSolid/IsWalkable/TileAt/DestroyBrick`, движение танка, коллизия со стеной, спавн пули (нормальный / стена / кирпич), кулдаун, движение пули, winner-логика |
+| `internal/logger` | `New`, все методы, `With` |
+
+Используется `github.com/stretchr/testify` (`assert` / `require`).
+
+Запуск: `go test ./internal/...`
 
 ---
 
@@ -138,14 +191,14 @@ spawns:      # [x, y] точки спавна
 
 ```go
 type Config struct {
-    Port        int           `envconfig:"APP_PORT"        default:"8080"`
-    Env         string        `envconfig:"APP_ENV"         default:"local"`
-    DBConn      string        `envconfig:"DB_CONN_STRING"  required:"true"`
-    BotToken    string        `envconfig:"BOT_TOKEN"       required:"true"`
-    JWTSecret   string        `envconfig:"JWT_SECRET"      required:"true"`
-    JWTDuration time.Duration `envconfig:"JWT_DURATION"    default:"24h"`
-    TickRate    int           `envconfig:"TICK_RATE"       default:"20"`
-    MaxPlayers  int           `envconfig:"MAX_PLAYERS"     default:"4"`
+    AppPort      string        `envconfig:"APP_PORT"        default:"8080"`
+    AppEnv       string        `envconfig:"APP_ENV"         default:"local"`
+    DBConnString string        `envconfig:"DB_CONN_STRING"  required:"true"`
+    BotToken     string        `envconfig:"BOT_TOKEN"       required:"true"`
+    JWTSecret    string        `envconfig:"JWT_SECRET"      required:"true"`
+    JWTDuration  time.Duration `envconfig:"JWT_DURATION"    default:"24h"`
+    TickRate     int           `envconfig:"TICK_RATE"       default:"20"`
+    MaxPlayers   int           `envconfig:"MAX_PLAYERS"     default:"4"`
 }
 ```
 
@@ -162,6 +215,7 @@ type Config struct {
 | Конфиг | kelseyhightower/envconfig |
 | .env | joho/godotenv (только локально) |
 | YAML | gopkg.in/yaml.v3 |
+| Тесты | testify (assert/require) |
 | Деплой | Docker Compose |
 | TLS | Caddy / Nginx (обязателен для Mini App) |
 | CI/CD | GitHub Actions → GHCR (на теге `v*`) |
@@ -171,7 +225,8 @@ type Config struct {
 ## Важные решения и ограничения
 
 - **Redis не нужен** — JWT сессии, in-memory игры, 10 GB RAM хватит на сотни матчей
-- **Спрайты из `tanks-sprites/PNG/`** — использовать только папки `_256X256` для орудий (не `Weapon_Color_X/` — там 36×90, не квадратные)
-- **Dockerfile** — флаг `-o app`, не `-a app`; `tanks-sprites/` копируется в финальный образ
+- **PNG-спрайты не используются в рендеринге** — танки и тайлы рисуются на Canvas API. Поля `hull`/`gun` в YAML-конфигах остаются для возможного будущего использования
+- **Dockerfile** — путь сборки `./cmd/` (main.go в корне `cmd/`), не `./cmd/server/`; образ финальный Alpine; `tanks-sprites/` копируется для потенциальных статических ресурсов
 - **DB_CONN_STRING** внутри Docker — хост `db`, не `localhost`
 - **Файлы миграций** — формат `{version}_{name}.up.sql` (например `000001_init.up.sql`)
+- **Логгер** — только через `internal/logger.Logger`, не напрямую через `slog`
