@@ -1,12 +1,16 @@
 package loader
 
 import (
+	"embed"
 	"fmt"
-	"os"
+	"io/fs"
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
+
+//go:embed tanks maps
+var embeddedFS embed.FS
 
 type TankConfig struct {
 	ID            string `yaml:"id"             json:"id"`
@@ -16,7 +20,7 @@ type TankConfig struct {
 	BulletSpeed   int    `yaml:"bullet_speed"   json:"bullet_speed"`
 	BulletDamage  int    `yaml:"bullet_damage"  json:"bullet_damage"`
 	ShootCooldown int    `yaml:"shoot_cooldown" json:"shoot_cooldown"`
-	Hull          string `yaml:"hull"           json:"hull"` // path inside tanks-sprites/PNG/
+	Hull          string `yaml:"hull"           json:"hull"`
 	Gun           string `yaml:"gun"            json:"gun"`
 }
 
@@ -34,12 +38,18 @@ type Loader struct {
 	Maps  map[string]*MapConfig
 }
 
-func Load(tanksDir, mapsDir string) (*Loader, error) {
+// Load reads tank and map configs from the embedded filesystem.
+func Load() (*Loader, error) {
+	return LoadFrom(embeddedFS, "tanks", "maps")
+}
+
+// LoadFrom reads configs from any fs.FS — used in tests.
+func LoadFrom(fsys fs.FS, tanksDir, mapsDir string) (*Loader, error) {
 	l := &Loader{
 		Tanks: make(map[string]*TankConfig),
 		Maps:  make(map[string]*MapConfig),
 	}
-	if err := loadDir(tanksDir, func(data []byte) error {
+	if err := loadDir(fsys, tanksDir, func(data []byte) error {
 		var t TankConfig
 		if err := yaml.Unmarshal(data, &t); err != nil {
 			return err
@@ -49,7 +59,7 @@ func Load(tanksDir, mapsDir string) (*Loader, error) {
 	}); err != nil {
 		return nil, fmt.Errorf("tanks: %w", err)
 	}
-	if err := loadDir(mapsDir, func(data []byte) error {
+	if err := loadDir(fsys, mapsDir, func(data []byte) error {
 		var m MapConfig
 		if err := yaml.Unmarshal(data, &m); err != nil {
 			return err
@@ -62,8 +72,8 @@ func Load(tanksDir, mapsDir string) (*Loader, error) {
 	return l, nil
 }
 
-func loadDir(dir string, fn func([]byte) error) error {
-	entries, err := os.ReadDir(dir)
+func loadDir(fsys fs.FS, dir string, fn func([]byte) error) error {
+	entries, err := fs.ReadDir(fsys, dir)
 	if err != nil {
 		return fmt.Errorf("read dir %s: %w", dir, err)
 	}
@@ -71,7 +81,7 @@ func loadDir(dir string, fn func([]byte) error) error {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".yaml" {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		data, err := fs.ReadFile(fsys, dir+"/"+e.Name())
 		if err != nil {
 			return err
 		}

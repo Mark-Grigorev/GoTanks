@@ -9,7 +9,7 @@ GoTanks — мультиплеерная браузерная игра «Тан�
 - **7 типов танков** — Разведчик, Лёгкий, Средний, Скорострельный, Снайпер, Тяжёлый, Осадный — каждый с уникальными характеристиками (скорость, HP, урон, кулдаун)
 - **3 карты** — Арена, Форт, Джунгли; задаются YAML-конфигами
 - **Матчи** — комнаты до 4 игроков с real-time game loop на 20 TPS
-- **Спрайты** — двухслойный рендеринг (корпус + орудие) на Canvas, все спрайты загружаются до старта игры
+- **Pixel art рендеринг** — танки и тайлы рисуются на Canvas API в стиле Battle City 90-х, без PNG-спрайтов
 - **Статистика** — победы, поражения, убийства, смерти
 - **Лидерборд** — топ игроков по статистике
 
@@ -31,20 +31,18 @@ GoTanks — мультиплеерная браузерная игра «Тан�
 
 ```
 .
-├── cmd/server/           # точка входа
+├── cmd/                  # точка входа (main.go)
 ├── internal/
 │   ├── auth/             # валидация Telegram initData, выдача JWT
 │   ├── config/           # envconfig-конфиг приложения
-│   ├── handler/          # HTTP-хэндлеры (Chi routes), отдача спрайтов
+│   ├── handler/          # HTTP-хэндлеры (Chi routes)
 │   ├── hub/              # WS-хаб, жизненный цикл комнат
 │   ├── game/             # game loop, состояние комнаты, сущности
 │   ├── store/            # запросы к PostgreSQL
 │   ├── loader/           # загрузка YAML-конфигов танков и карт
-│   ├── tanks/            # embedded-конфиги танков (загрузка при старте)
-│   └── maps/             # embedded-конфиги карт (загрузка при старте)
+│   └── logger/           # обёртка над slog с printf-стилем
 ├── tanks/                # 7 YAML-конфигов танков
 ├── maps/                 # 3 YAML-конфига карт
-├── tanks-sprites/        # PNG-спрайты (корпуса и орудия 256×256)
 ├── web/                  # Telegram Mini App (HTML / JS / CSS)
 ├── migrations/           # миграции БД (golang-migrate)
 ├── .github/workflows/    # CI (lint + test) + CD (docker push на тег)
@@ -65,10 +63,10 @@ docker compose up --build -d
 Локальная разработка (Go 1.26+):
 
 ```bash
-make run     # запустить приложение
-make build   # собрать бинарник в bin/server
-make test    # тесты
-make lint    # go vet
+make run                      # запустить приложение
+make build                    # собрать бинарник в bin/server
+go test ./internal/...        # unit-тесты
+make lint                     # go vet
 ```
 
 ## Переменные окружения
@@ -118,7 +116,7 @@ GoTanks is a multiplayer browser tank game built as a Telegram Mini App. Players
 - **7 tank types** — Scout, Light, Medium, Rapid, Sniper, Heavy, Siege — each with unique stats (speed, HP, damage, cooldown)
 - **3 maps** — Arena, Fort, Jungle; defined by YAML configs
 - **Matches** — rooms for up to 4 players with a real-time 20 TPS game loop
-- **Sprites** — two-layer Canvas rendering (hull + gun); all sprites preloaded before the game starts
+- **Pixel art rendering** — tanks and tiles drawn via Canvas API in Battle City 90s style, no PNG sprites
 - **Statistics** — wins, losses, kills, deaths
 - **Leaderboard** — top players by stats
 
@@ -140,20 +138,18 @@ GoTanks is a multiplayer browser tank game built as a Telegram Mini App. Players
 
 ```
 .
-├── cmd/server/           # entry point
+├── cmd/                  # entry point (main.go)
 ├── internal/
 │   ├── auth/             # Telegram initData validation, JWT issuance
 │   ├── config/           # envconfig-based app config
-│   ├── handler/          # HTTP handlers (Chi routes), sprite serving
+│   ├── handler/          # HTTP handlers (Chi routes)
 │   ├── hub/              # WS hub, room lifecycle management
 │   ├── game/             # game loop, room state, entities
 │   ├── store/            # PostgreSQL queries
 │   ├── loader/           # YAML tank/map config loader
-│   ├── tanks/            # embedded tank configs (loaded at startup)
-│   └── maps/             # embedded map configs (loaded at startup)
+│   └── logger/           # slog wrapper with printf-style API
 ├── tanks/                # 7 tank YAML configs
 ├── maps/                 # 3 map YAML configs
-├── tanks-sprites/        # PNG sprites (hulls + guns, 256×256)
 ├── web/                  # Telegram Mini App (HTML / JS / CSS)
 ├── migrations/           # DB migrations (golang-migrate)
 ├── .github/workflows/    # CI (lint + test) + CD (docker push on tag)
@@ -174,10 +170,10 @@ The app listens on `APP_PORT` (default 8080). TLS is required for Telegram Mini 
 Local development (Go 1.26+):
 
 ```bash
-make run     # run the app
-make build   # build binary to bin/server
-make test    # run tests
-make lint    # go vet
+make run                      # run the app
+make build                    # build binary to bin/server
+go test ./internal/...        # unit tests
+make lint                     # go vet
 ```
 
 ## Environment Variables

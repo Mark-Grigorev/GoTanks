@@ -2,9 +2,10 @@ package main
 
 import (
 	"context"
+	"embed"
 	"errors"
 	"fmt"
-	"log"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/signal"
@@ -18,8 +19,12 @@ import (
 	"github.com/Mark-Grigorev/GoTanks/internal/handler"
 	"github.com/Mark-Grigorev/GoTanks/internal/hub"
 	"github.com/Mark-Grigorev/GoTanks/internal/loader"
+	"github.com/Mark-Grigorev/GoTanks/internal/logger"
 	"github.com/Mark-Grigorev/GoTanks/internal/store"
 )
+
+//go:embed web
+var webFiles embed.FS
 
 const (
 	exitOK             = 0
@@ -37,41 +42,45 @@ func main() {
 func run() int {
 	_ = godotenv.Load()
 
+	log := logger.New(true) // hardcode - DEGUG=true
+
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "config: %v\n", err)
+		log.Errorf("config: %v", err)
 		return exitConfigError
 	}
 
 	authSvc, err := newAuthService(cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "auth: %v\n", err)
+		log.Errorf("auth: %v", err)
 		return exitAuthError
 	}
 
 	ctx := context.Background()
 
 	if err := store.Migrate(cfg.DBConnString); err != nil {
-		fmt.Fprintf(os.Stderr, "migrate: %v\n", err)
+		log.Errorf("migrate: %v", err)
 		return exitDBMigrate
 	}
 
 	db, err := store.New(ctx, cfg.DBConnString)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "db connect: %v\n", err)
+		log.Errorf("db connect: %v", err)
 		return exitDBConnect
 	}
 	defer db.Close()
 
-	l, err := loader.Load("tanks", "maps")
+	l, err := loader.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "loader: %v\n", err)
+		log.Errorf("loader: %v", err)
 		return exitConfigError
 	}
-	log.Printf("loaded %d tanks, %d maps", len(l.Tanks), len(l.Maps))
+	log.Infof("loaded %d tanks, %d maps", len(l.Tanks), len(l.Maps))
+
+	webRoot, _ := fs.Sub(webFiles, "web")
 
 	h := hub.New(l, db, authSvc, cfg.MaxPlayers, cfg.TickRate)
-	hand := handler.New(authSvc, db, l, h)
+	hand := handler.New(authSvc, db, l, h, webRoot)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.AppPort,
@@ -82,19 +91,19 @@ func run() int {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		log.Printf("server listening on :%s", cfg.AppPort)
+		log.Infof("server listening on :%s", cfg.AppPort)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("server error: %v", err)
+			log.Errorf("server: %v", err)
 		}
 	}()
 
 	<-quit
-	log.Println("shutting down...")
+	log.Infof("shutting down...")
 
 	shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutCtx); err != nil {
-		fmt.Fprintf(os.Stderr, "shutdown: %v\n", err)
+		log.Errorf("shutdown: %v", err)
 		return exitServerShutdown
 	}
 	return exitOK

@@ -1,0 +1,129 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: system-ui, sans-serif;
+  background: var(--tg-theme-bg-color, #111118);
+  color: var(--tg-theme-text-color, #eee);
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.screen { display: none; flex-direction: column; height: 100dvh; padding: 4vw; overflow-y: auto; }
+.screen.active { display: flex; }
+
+h1 { text-align: center; font-size: clamp(1.4rem, 5vw, 2rem); margin-bottom: 3vw; }
+h2 { font-size: clamp(.9rem, 3.5vw, 1.1rem); margin-bottom: 2vw; }
+
+/* Tank selection */
+.card-row {
+  display: flex; gap: 2vw; overflow-x: auto; padding-bottom: 1vw;
+}
+.tank-card {
+  flex: 0 0 clamp(72px, 22vw, 96px);
+  border: 2px solid #444; border-radius: 8px;
+  padding: 6px; text-align: center; cursor: pointer; transition: border-color .15s;
+}
+.tank-card.selected { border-color: #c8c800; background: #1e1e08; }
+.tank-card .name { font-weight: 600; font-size: clamp(.7rem, 2.5vw, .85rem); margin-top: 4px; }
+.tank-card .stat { font-size: clamp(.6rem, 2vw, .72rem); color: #aaa; }
+.tank-preview-canvas {
+  display: block; width: 100%; aspect-ratio: 1;
+  image-rendering: pixelated;
+}
+
+/* Room list */
+#room-section { margin-top: 3vw; }
+.row { display: flex; align-items: center; gap: 2vw; margin-bottom: 2vw; }
+#room-list { display: flex; flex-direction: column; gap: 1.5vw; margin-bottom: 3vw; min-height: 40px; }
+.room-item {
+  display: flex; justify-content: space-between; align-items: center;
+  background: #1a1a2e; border-radius: 8px; padding: 2.5vw 3vw; cursor: pointer;
+}
+.room-item:hover { background: #22223a; }
+.room-info { font-size: clamp(.75rem, 2.5vw, .85rem); }
+.room-count { font-size: clamp(.7rem, 2.2vw, .8rem); color: #aaa; }
+
+/* Buttons */
+.btn-primary, .btn-secondary, .btn-sm {
+  border: none; border-radius: 8px; cursor: pointer;
+  font-size: clamp(.8rem, 3vw, .9rem); padding: 2.5vw 4vw;
+}
+.btn-primary  { background: #c8c800; color: #111; width: 100%; margin-top: auto; }
+.btn-secondary{ background: #555; color: #fff; width: 100%; margin-top: 2vw; }
+.btn-sm       { background: #333; color: #ccc; padding: 1vw 2.5vw; font-size: clamp(.7rem, 2.5vw, .8rem); }
+
+/* Waiting screen */
+#screen-waiting { align-items: center; justify-content: center; gap: 3vw; text-align: center; }
+#wait-players { display: flex; flex-direction: column; gap: 1.5vw; width: 100%; max-width: 280px; }
+.wait-player { background: #1a1a2e; border-radius: 6px; padding: 2vw 3vw; }
+
+/* Game screen — flex column, canvas fills available space */
+#screen-game {
+  padding: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+#game-hud {
+  flex-shrink: 0;
+  display: flex; justify-content: space-between; align-items: center; gap: 2vw;
+  font-size: clamp(.75rem, 2.8vw, .85rem);
+  background: rgba(0,0,0,.7);
+  padding: 1.5vw 3vw;
+  border-bottom: 1px solid #222;
+}
+#hud-buffs {
+  display: flex; gap: 1vw; align-items: center; flex: 1; justify-content: center;
+}
+.buff-badge {
+  font-size: clamp(.55rem, 2vw, .72rem);
+  padding: 1px 5px; border-radius: 4px; font-weight: 700;
+  white-space: nowrap;
+}
+.buff-damage { background: #7a2000; color: #ff8040; }
+.buff-armor  { background: #00247a; color: #60b0ff; }
+.buff-speed  { background: #5a4800; color: #ffdd40; }
+.buff-heal   { background: #004010; color: #40e060; }
+
+#game-canvas {
+  flex: 1;
+  min-height: 0;
+  display: block;
+  width: 100%;
+  image-rendering: pixelated;
+  background: #0c0c10;
+}
+
+/* D-pad */
+#dpad {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-areas: ". up ." "left . right" ". down ." ". shoot .";
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1vw;
+  width: clamp(140px, 44vw, 200px);
+  margin: 1.5vw auto;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.dpad-btn {
+  background: rgba(255,255,255,.12); border: none; border-radius: 8px;
+  color: #fff; font-size: clamp(.9rem, 4vw, 1.3rem);
+  padding: clamp(8px, 3.5vw, 14px); cursor: pointer; touch-action: manipulation;
+}
+.dpad-btn:active { background: rgba(255,255,255,.35); }
+.dpad-up    { grid-area: up; }
+.dpad-left  { grid-area: left; }
+.dpad-right { grid-area: right; }
+.dpad-down  { grid-area: down; }
+.dpad-shoot { grid-area: shoot; background: rgba(200,200,0,.35); }
+.btn-quit {
+  background: none; border: none; color: #f44; font-size: clamp(.9rem, 3.5vw, 1rem);
+  cursor: pointer; padding: 0 2px; line-height: 1;
+}
+
+/* Game over */
+#screen-gameover { align-items: center; justify-content: center; gap: 4vw; text-align: center; }
+#go-title { font-size: clamp(1.5rem, 7vw, 2rem); }
+#go-sub   { color: #aaa; font-size: clamp(.85rem, 3vw, 1rem); }

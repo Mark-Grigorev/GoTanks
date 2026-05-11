@@ -17,28 +17,52 @@ type Tank struct {
 	HP                int
 	MaxHP             int
 	TankType          string
-	MoveInterval      int // ticks between moves
+	MoveInterval      int
 	MoveTicker        int
-	ShootCooldown     int // ticks until next shot allowed
-	ShootCooldownBase int // configured cooldown per tank type
-	BulletSpeed       int // tiles per second
+	ShootCooldown     int
+	ShootCooldownBase int
+	BulletSpeed       int
 	BulletDamage      int
 	Alive             bool
+
+	// Active power-up effects
+	DamageBoostTicks int // ticks remaining; bullet damage ×2
+	ArmorCharges     int // absorbs this many damage points
+	SpeedBoostTicks  int // ticks remaining; move interval halved
 }
 
 type Bullet struct {
-	ID           string
+	ID            string
 	OwnerPlayerID string
-	X, Y         int
-	Dir          Direction
-	MoveInterval int // ticks between moves
-	MoveTicker   int
-	Damage       int
+	X, Y          int
+	Dir           Direction
+	MoveInterval  int
+	MoveTicker    int
+	Damage        int
 }
 
 type KillEvent struct {
-	KillerPlayerID string
-	VictimPlayerID string
-	KillerUserID   int64
-	VictimUserID   int64
+	KillerPlayerID string `json:"killer_id"`
+	VictimPlayerID string `json:"victim_id"`
+	KillerUserID   int64  `json:"killer_user_id"`
+	VictimUserID   int64  `json:"victim_user_id"`
+}
+
+// ── Power-ups ──────────────────────────────────────────────────────────────
+
+type PowerUpType string
+
+const (
+	PowerUpDamage PowerUpType = "damage" // bullet damage ×2 for 15 s
+	PowerUpArmor  PowerUpType = "armor"  // absorbs 3 damage points
+	PowerUpSpeed  PowerUpType = "speed"  // move speed ×2 for 10 s
+	PowerUpHeal   PowerUpType = "heal"   // restores 2 HP
+)
+
+var PowerUpTypes = []PowerUpType{PowerUpDamage, PowerUpArmor, PowerUpSpeed, PowerUpHeal}
+
+type PowerUp struct {
+	ID   string
+	Type PowerUpType
+	X, Y int
 }
