@@ -56,20 +56,46 @@ match_players (match_id, user_id, tank_type, result)
 
 ## YAML-конфиги
 
+YAML-файлы **embedded** в бинарник через `//go:embed` в `internal/loader/loader.go`:
+```go
+//go:embed tanks maps
+var embeddedFS embed.FS
+
+func Load() (*Loader, error) {
+    return LoadFrom(embeddedFS, "tanks", "maps")
+}
+func LoadFrom(fsys fs.FS, tanksDir, mapsDir string) (*Loader, error) { ... }
+```
+`Load()` — для продакшена (embedded). `LoadFrom(os.DirFS(...))` — для тестов.
+
 ### Танк (пример: `tanks/heavy.yaml`)
 ```yaml
 id: heavy
 name: "Тяжёлый"
 speed: 2
-hp: 5
-bullet_speed: 8
+hp: 10
+bullet_speed: 6
 bullet_damage: 2
-shoot_cooldown: 15
+shoot_cooldown: 14
 hull: "PNG/Hulls_Color_B/Hull_06.png"
 gun:  "PNG/Weapon_Color_B_256X256/Gun_06.png"
 ```
 
-Загружается при старте в `map[string]*TankConfig` — O(1) доступ. Поля `hull`/`gun` сохранены для совместимости конфигов, но рендеринг не использует PNG.
+Загружается при старте в `map[string]*TankConfig` — O(1) доступ. Поля `hull`/`gun` сохранены для совместимости, рендеринг не использует PNG.
+
+### Баланс танков (актуальные значения)
+
+| ID | Имя | Speed | HP | BulletDmg | Cooldown |
+|---|---|---|---|---|---|
+| scout | Разведчик | 4 | 2 | 1 | 6 |
+| light | Лёгкий | 3 | 4 | 1 | 8 |
+| medium | Средний | 2 | 6 | 2 | 10 |
+| rapid | Скорострел | 3 | 4 | 1 | 4 |
+| sniper | Снайпер | 2 | 4 | 3 | 20 |
+| heavy | Тяжёлый | 2 | 10 | 2 | 14 |
+| siege | Осадный | 1 | 12 | 4 | 22 |
+
+`moveInterval = tickRate / speed` — количество тиков между шагами. При 20 TPS: speed=4 → каждые 5 тиков, speed=1 → каждые 20 тиков.
 
 Текущие 7 танков: `scout`, `light`, `medium`, `rapid`, `sniper`, `heavy`, `siege`.
 
@@ -93,11 +119,66 @@ spawns:      # [x, y] точки спавна
 
 - Каждая комната — отдельная горутина с `time.Ticker`
 - Тикрейт: 20 TPS (конфигурируется через `TICK_RATE`)
-- `initialPlayerCount` фиксируется при старте — одиночный игрок никогда не получает "победу" автоматически
-- `winner()` срабатывает только если `initialPlayerCount > 1` и есть хотя бы один погибший
 - Направления: 0=вверх, 1=вправо, 2=вниз, 3=влево
 - Мьютекс на Room освобождается через `defer` — не вручную
 - **Баг-фикс**: при спавне пули проверяется `IsSolid(bx, by)` — если клетка перед танком занята стеной или кирпичом, пуля не создаётся (кирпич уничтожается сразу). Это устраняет баг стрельбы сквозь стену вплотную.
+
+### winner()
+
+Победитель определяется по факту: есть хотя бы один мёртвый игрок.
+```go
+func (r *Room) winner() string {
+    var alive []*Player
+    var dead int
+    for _, p := range r.Players {
+        if p.Tank.Alive { alive = append(alive, p) } else { dead++ }
+    }
+    if dead == 0 { return "" }
+    switch len(alive) {
+    case 0: return "draw"
+    case 1: return alive[0].ID
+    }
+    return ""
+}
+```
+
+### RemovePlayer() во время игры
+
+Если игрок отключается во время боя — танк помечается мёртвым (не удаляется из `r.Players`), иначе `dead` не посчитается и `winner()` не сработает:
+```go
+if r.State == RoomPlaying {
+    p.Tank.Alive = false
+    p.Tank.HP = 0
+} else {
+    delete(r.Players, playerID)
+}
+```
+
+### KillEvent — JSON-теги обязательны
+
+```go
+type KillEvent struct {
+    KillerPlayerID string `json:"killer_id"`
+    VictimPlayerID string `json:"victim_id"`
+    KillerUserID   int64  `json:"killer_user_id"`
+    VictimUserID   int64  `json:"victim_user_id"`
+}
+```
+
+---
+
+## Hub — ограничения хоста
+
+`roomEntry` хранит `hostPlayerID`. `start_game` принимается только от хоста:
+```go
+if entry.hostPlayerID != c.PlayerID {
+    c.Send(ServerMsg{Type: "error", Payload: ErrorPayload{Message: "only host can start"}})
+    return
+}
+```
+`RoomJoinedPayload` содержит `IsHost bool json:"is_host"` — клиент скрывает кнопку старта для не-хостов.
+
+---
 
 ## WebSocket протокол
 
@@ -112,7 +193,7 @@ spawns:      # [x, y] точки спавна
 
 **Сервер → Клиент:**
 ```json
-{ "type": "room_joined",  "payload": { "player_id": "...", "room_id": "...", ... } }
+{ "type": "room_joined",  "payload": { "player_id": "...", "room_id": "...", "is_host": true, ... } }
 { "type": "game_start",   "payload": { "map": {...}, "players": [...] } }
 { "type": "state",        "payload": { "tanks": [...], "bullets": [...], "tile_changes": [...], "kills": [...] } }
 { "type": "game_over",    "payload": { "winner_id": "..." } }
@@ -125,6 +206,9 @@ spawns:      # [x, y] точки спавна
 ## Клиентский рендеринг (Canvas) — стиль Battle City 90-х
 
 PNG-спрайты **не используются**. Всё рисуется на Canvas API программно.
+
+### Цвета игроков
+`PLAYER_COLORS = ['#c49a3c', '#1e7a32', '#a82010', '#1848b0']` — военная палитра (песочный, зелёный, красный, синий).
 
 ### Тайлы — `drawTile(ctx, type, px, py, T)`
 - `TILE_EMPTY`: тёмный фон `#0c0c10` + точечная текстура (при T ≥ 12)
@@ -149,8 +233,30 @@ PNG-спрайты **не используются**. Всё рисуется н
 Отображается в % от максимального HP (`t.hp / maxHp`). HUD тоже показывает `HP X%`.
 
 ### Адаптивный размер
-CSS-лейаут: `#screen-game` — flex-колонка, `#game-canvas` — `flex: 1` (занимает всё место между HUD и dpad). `calcTileSize()` читает `canvas.clientWidth/clientHeight` из CSS, не использует `innerHeight - px`.
+CSS-лейаут: `#screen-game` — flex-колонка (через `.screen.active { display: flex }`), `#game-canvas` — `flex: 1` (занимает всё место между HUD и dpad). `calcTileSize()` читает `canvas.clientWidth/clientHeight` из CSS, не использует `innerHeight - px`.
 Все размеры в CSS через `clamp()`, `vw`, `dvh`.
+
+### CSS — критические правила
+
+**`#screen-game` НЕ должен содержать `display: flex`** — только `.screen.active { display: flex }` управляет видимостью. ID-селектор имеет специфичность (0,1,0,0) и переопределяет `.screen { display: none }` (0,0,1,0), что приводит к тому что экран игры всегда виден и перекрывает экран окончания игры.
+
+### Fallback-таймер game over на клиенте
+
+Если `game_over` WS-сообщение теряется (буфер `c.send` заполнен), клиент самостоятельно определяет конец игры через `gameOverTimer` по состоянию HP танков в очередном `state`-пакете. Задержка 1500 мс.
+
+---
+
+## Статические файлы (web)
+
+Фронтенд (`cmd/web/`) embedded в бинарник через `//go:embed web` в `cmd/main.go`:
+```go
+//go:embed web
+var webFiles embed.FS
+
+webRoot, _ := fs.Sub(webFiles, "web")
+hand := handler.New(authSvc, db, l, h, webRoot)
+```
+`Handler` принимает `web fs.FS` как параметр — статика не захардкожена в handler-пакете.
 
 ---
 
@@ -175,7 +281,7 @@ child := log.With("room", roomID) // структурные поля
 |---|---|
 | `internal/auth` | HMAC-валидация initData, выдача/парсинг JWT (expired, wrong secret, tampered) |
 | `internal/config` | Дефолты, кастомные значения, ошибка при отсутствии required полей |
-| `internal/loader` | Загрузка YAML, пустые директории, невалидный YAML, игнор не-.yaml файлов |
+| `internal/loader` | Загрузка YAML (embedded + `LoadFrom`), пустые директории, невалидный YAML, игнор не-.yaml файлов |
 | `internal/game` | `IsSolid/IsWalkable/TileAt/DestroyBrick`, движение танка, коллизия со стеной, спавн пули (нормальный / стена / кирпич), кулдаун, движение пули, winner-логика |
 | `internal/logger` | `New`, все методы, `With` |
 
@@ -226,7 +332,8 @@ type Config struct {
 
 - **Redis не нужен** — JWT сессии, in-memory игры, 10 GB RAM хватит на сотни матчей
 - **PNG-спрайты не используются в рендеринге** — танки и тайлы рисуются на Canvas API. Поля `hull`/`gun` в YAML-конфигах остаются для возможного будущего использования
-- **Dockerfile** — путь сборки `./cmd/` (main.go в корне `cmd/`), не `./cmd/server/`; образ финальный Alpine; `tanks-sprites/` копируется для потенциальных статических ресурсов
+- **Dockerfile** — путь сборки `./cmd/` (main.go в корне `cmd/`), не `./cmd/server/`; образ финальный Alpine
 - **DB_CONN_STRING** внутри Docker — хост `db`, не `localhost`
 - **Файлы миграций** — формат `{version}_{name}.up.sql` (например `000001_init.up.sql`)
 - **Логгер** — только через `internal/logger.Logger`, не напрямую через `slog`
+- **Embed**: статика и YAML-конфиги embedded в бинарник — отдельных `COPY` в Dockerfile не нужно

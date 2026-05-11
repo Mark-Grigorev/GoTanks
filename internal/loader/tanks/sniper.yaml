@@ -1,9 +1,9 @@
 id: sniper
 name: "Снайпер"
 speed: 2
-hp: 2
-bullet_speed: 18
-bullet_damage: 4
-shoot_cooldown: 18
+hp: 4
+bullet_speed: 16
+bullet_damage: 3
+shoot_cooldown: 20
 hull: "PNG/Hulls_Color_A/Hull_04.png"
 gun:  "PNG/Weapon_Color_A_256X256/Gun_07.png"

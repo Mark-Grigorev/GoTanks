@@ -8,8 +8,19 @@ const TILE_EMPTY = 0, TILE_WALL = 1, TILE_BRICK = 2;
 const DIR_DEG = { 0: 0, 1: 90, 2: 180, 3: 270 };
 const TICK_MS = 50;
 
-// 90s NES-style palette per player slot
-const PLAYER_COLORS = ['#c8c800', '#00b432', '#c82000', '#0050c8'];
+// Muted military palette — less shimmer, more Battle City feel
+const PLAYER_COLORS = ['#c49a3c', '#1e7a32', '#a82010', '#1848b0'];
+
+// NES Battle City 1990 palette for tank selection preview
+const TANK_PREVIEW_COLORS = {
+  scout:  '#d8b800', // bright NES yellow — fast scout
+  light:  '#e0d060', // lighter yellow
+  medium: '#38a028', // NES green
+  rapid:  '#d8b800', // yellow — rapid fire
+  sniper: '#909858', // NES olive
+  heavy:  '#287018', // NES dark green
+  siege:  '#808878', // NES silver-gray
+};
 
 // Visual parameters per tank type (fractions of tile size)
 // tw=trackWidth, bw=bodyWidth, turW=turretWidth, gunW=gunWidth, gunL=gunLength
@@ -111,12 +122,12 @@ function drawTankPixel(ctx, tankType, color, isMe, T) {
   const def = TANK_DEFS[tankType] || TANK_DEFS.medium;
   const h = T; // half extents: ±h/2
 
-  const dark1 = hexMult(color, 0.45);  // tracks (darkest)
-  const dark2 = hexMult(color, 0.65);  // track ticks
+  const dark1 = hexMult(color, 0.52);  // tracks
+  const dark2 = hexMult(color, 0.70);  // track link ticks
   const body  = color;
-  const turret = hexMult(color, 0.78); // turret slightly darker
-  const gun   = hexMult(color, 0.55);
-  const lite  = hexAdd(color, 50);
+  const turret = hexMult(color, 0.84);
+  const gun   = hexMult(color, 0.60);
+  const lite  = hexAdd(color, 28);
 
   const tw  = h * def.tw;
   const bw  = h * def.bw;
@@ -155,9 +166,6 @@ function drawTankPixel(ctx, tankType, color, isMe, T) {
   // ── Turret ──
   ctx.fillStyle = turret;
   ctx.fillRect(-turW/2, turOff - turW/2, turW, turW);
-  ctx.fillStyle = hexAdd(color, 20);
-  ctx.fillRect(-turW/2, turOff - turW/2, turW, 1);
-  ctx.fillRect(-turW/2, turOff - turW/2, 1, turW);
 
   // ── "Me" star marker (center of body) ──
   if (isMe) {
@@ -253,9 +261,12 @@ const S = {
   tanks: [], maps: [],
   selectedTank: null,
   myPlayerID: null, roomID: null,
+  isHost: false,
   maxPlayers: 4, playerCount: 0,
   map: null, players: [], kills: 0,
 };
+
+let gameOverTimer = null;
 
 const interp = { prev: null, curr: null, prevTime: 0, currTime: 0 };
 let rafId = null;
@@ -318,7 +329,7 @@ function drawTankPreview(canvas, tankType) {
   ctx.fillRect(0, 0, size, size);
   ctx.save();
   ctx.translate(size / 2, size / 2);
-  drawTankPixel(ctx, tankType, PLAYER_COLORS[0], false, size * 0.8);
+  drawTankPixel(ctx, tankType, TANK_PREVIEW_COLORS[tankType] || PLAYER_COLORS[0], false, size * 0.8);
   ctx.restore();
 }
 
@@ -436,6 +447,8 @@ function handleMsg(msg) {
       S.roomID      = p.room_id;
       S.playerCount = p.player_count;
       S.maxPlayers  = p.max_players;
+      S.isHost      = !!p.is_host;
+      document.getElementById('btn-start').style.display = S.isHost ? '' : 'none';
       refreshWaitScreen(); showScreen('screen-waiting'); break;
     case 'player_joined':
     case 'player_left':
@@ -451,8 +464,26 @@ function handleMsg(msg) {
       interp.prevTime = interp.currTime;
       interp.curr     = p;
       interp.currTime = performance.now();
+      // Fallback: detect game end on client side in case game_over is lost/dropped
+      if (!gameOverTimer) {
+        const tanks = p.tanks || [];
+        const me = tanks.find(t => t.id === S.myPlayerID);
+        if (me) {
+          const iDead      = me.hp <= 0;
+          const othersDead = tanks.filter(t => t.id !== S.myPlayerID).every(t => t.hp <= 0);
+          if (iDead || (tanks.length > 1 && othersDead)) {
+            gameOverTimer = setTimeout(() => {
+              gameOverTimer = null;
+              if (iDead && othersDead)  endGame('draw');
+              else if (iDead)           endGame('');
+              else                      endGame(S.myPlayerID);
+            }, 1500);
+          }
+        }
+      }
       break;
     case 'game_over':
+      if (gameOverTimer) { clearTimeout(gameOverTimer); gameOverTimer = null; }
       endGame(p.winner_id); break;
     case 'error':
       console.warn('server:', p?.message); break;
@@ -595,6 +626,7 @@ function renderFrame(alpha) {
 }
 
 function endGame(winnerID) {
+  if (gameOverTimer) { clearTimeout(gameOverTimer); gameOverTimer = null; }
   stopRenderLoop();
   resetTouchMove();
   const win  = winnerID !== '' && winnerID === S.myPlayerID;

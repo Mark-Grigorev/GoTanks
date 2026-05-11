@@ -28,6 +28,7 @@ type RoomJoinedPayload struct {
 	PlayerID    string `json:"player_id"`
 	PlayerCount int    `json:"player_count"`
 	MaxPlayers  int    `json:"max_players"`
+	IsHost      bool   `json:"is_host"`
 }
 
 type PlayerJoinedPayload struct {
