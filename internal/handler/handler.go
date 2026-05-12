@@ -31,6 +31,7 @@ func (h *Handler) Router() http.Handler {
 	r.Use(chimw.Recoverer)
 	r.Use(chimw.Logger)
 
+	r.Get("/health", h.Health)
 	r.Handle("/*", http.FileServer(http.FS(h.web)))
 
 	r.Route("/api", func(r chi.Router) {
@@ -50,6 +51,20 @@ func (h *Handler) Router() http.Handler {
 	r.Get("/ws", h.hub.ServeWS)
 
 	return r
+}
+
+// Health GET /health
+func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
+	type response struct {
+		Status string `json:"status"`
+		DB     string `json:"db"`
+	}
+
+	if err := h.store.Ping(r.Context()); err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, response{Status: "degraded", DB: "unreachable"})
+		return
+	}
+	writeJSON(w, http.StatusOK, response{Status: "ok", DB: "ok"})
 }
 
 // Auth POST /api/auth

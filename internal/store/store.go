@@ -35,6 +35,10 @@ func (s *Store) Close() {
 	s.db.Close()
 }
 
+func (s *Store) Ping(ctx context.Context) error {
+	return s.db.Ping(ctx)
+}
+
 func Migrate(connStr string) error {
 	d, err := iofs.New(migrationsFS, "migrations")
 	if err != nil {
