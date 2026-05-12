@@ -9,6 +9,8 @@ ARG VERSION
 
 WORKDIR /app
 
+# В данном проекте нет необходимости фиксировать версии пакетов.
+# hadolint ignore=DL3018
 RUN apk add --no-cache gcc libc-dev
 
 COPY go.mod go.sum ./
@@ -18,16 +20,21 @@ COPY . .
 
 RUN go build -a -installsuffix cgo -o app -ldflags "-X 'main.version=${VERSION}'" ./cmd/
 
-FROM alpine:${ALPINE_VERSION}
+FROM alpine:${ALPINE_VERSION} 
 ARG PORT
 
 RUN addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup
 
+# В данном проекте нет необходимости фиксировать версии пакетов.
+# hadolint ignore=DL3018
 RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 
 COPY --from=build /app/app /app/app
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \ 
+            CMD wget -qO- http://localhost:8080/health || exit 1
 
 USER appuser
 
